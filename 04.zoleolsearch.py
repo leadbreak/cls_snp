@@ -27,7 +27,7 @@ from imblearn.over_sampling import SMOTE
 device = torch.device('cuda:2') if torch.cuda.is_available() else torch.device('cpu')
 print(device)
 
-random_seed = 41
+random_seed = 5833
 
 def seed_everything(seed):
     random.seed(seed)
@@ -45,33 +45,30 @@ def seed_worker(worker_id):
 
 seed_everything(seed=random_seed) # Seed 고정
 
-train = pd.read_csv("./data/df_train.csv")
-test = pd.read_csv("./data/df_test.csv")
-ae = pd.read_csv("./data/ae_values.csv")
-train2 = pd.concat([train, ae[:len(train)]], axis=1)
-test2 = pd.concat([test, ae[len(train):]], axis=1)
+train = pd.read_csv("./data/df_train5.csv")
+test = pd.read_csv("./data/df_test5.csv")
 
-y = torch.LongTensor(train2['class'].values)
-X = train2.drop(['id', 'class'], axis=1).to_numpy()
-X_test = test2.drop(['id'], axis=1).to_numpy()
+y = torch.LongTensor(train['class'].values)
+X = train.drop(['id', 'class', 'class_B', 'class_C'], axis=1).to_numpy()
+X_test = test.drop(['id', 'class', 'class_B', 'class_C'], axis=1).to_numpy()
 
 
 xgb_params = {
     'booster': 'gbtree',
-    'grow_policy': 'depthwise',
-    'max_depth': 4,
-    'learning_rate': 0.4,
-    'n_estimators': 30,
+    'grow_policy': 'lossguide',
+    'max_depth': 0,
+    'learning_rate': 0.3,
+    'n_estimators': 50,
     'reg_lambda': 100,
     'subsample': 0.9,
     'num_parallel_tree': 1,
-    # 'rate_drop': 0.3
+    # 'rate_drop': 0.5
 }
 
 high = 0
 for k in tqdm(range(2, 5+1)) :
     seeds = []
-    for _ in range(10000) :
+    for _ in range(10) :
         while True :
             random_seed = np.random.randint(100000)
             if random_seed not in seeds :
@@ -81,10 +78,10 @@ for k in tqdm(range(2, 5+1)) :
                 continue
 
         y = train['class'].values
-        X = train.drop(['id', 'class'], axis=1).to_numpy()
-        X_test = test.drop(['id'], axis=1).to_numpy()
+        X = train.drop(['id', 'class', 'class_B', 'class_C'], axis=1).to_numpy()
+        X_test = test.drop(['id', 'class', 'class_B', 'class_C'], axis=1).to_numpy()
 
-        skf = StratifiedKFold(n_splits=2, shuffle=True, random_state=random_seed)
+        skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=random_seed)
 
         oof_val_preds = np.zeros((X.shape[0], 3))
         oof_test_preds = np.zeros((X_test.shape[0], 3))
@@ -98,7 +95,8 @@ for k in tqdm(range(2, 5+1)) :
             X_train, y_train = X[train_idx], y[train_idx]
             X_valid, y_valid = X[valid_idx], y[valid_idx]
 
-            smote = SMOTE(random_state=random_seed)
+            strategy = {0:6900, 1:11400, 2:7900}
+            smote = SMOTE(random_state=random_seed, k_neighbors=7, sampling_strategy=strategy)
             X_train, y_train = smote.fit_resample(X_train, y_train)
 
             # 불균형 데이터 가중치 조정 값 => 음성(0) 타깃값 개수 / 양성(1) 타깃값 개수
